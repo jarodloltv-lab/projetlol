@@ -1,0 +1,19 @@
+{
+  "name": "lol-comp-builder",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "generate:profiles": "node scripts/generate-champion-profiles.cjs",
+    "generate:botlane": "node scripts/generate-botlane-synergies.cjs",
+    "generate:botlane-profiles": "node scripts/generate-botlane-profiles.cjs"
+  },
+  "dependencies": {
+    "next": "15.2.8",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  }
+}

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LoL Comp Builder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Sora:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">League of Legends Team Generator</p>
+        <h1>Genere une composition d'equipe forte et lisible</h1>
+        <p class="hero-text">
+          Choisis un style de jeu, une priorite strategique et laisse le site proposer
+          une draft 5v5 coherente avec engage, degats, controle et front line.
+        </p>
+      </div>
+      <div class="hero-card">
+        <p class="card-label">Objectif</p>
+        <strong>Composer une team facile a comprendre</strong>
+        <span>Top / Jungle / Mid / ADC / Support</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel controls-panel">
+        <h2>Parametres</h2>
+        <div class="controls-grid">
+          <label>
+            <span>Style d'equipe</span>
+            <select id="styleSelect">
+              <option value="teamfight">Teamfight</option>
+              <option value="pick">Pick / Catch</option>
+              <option value="poke">Poke / Siege</option>
+              <option value="wombo">Wombo Combo</option>
+              <option value="protect">Protect the Carry</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Niveau de risque</span>
+            <select id="riskSelect">
+              <option value="safe">Safe</option>
+              <option value="balanced" selected>Equilibre</option>
+              <option value="spicy">Agressif</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Priorite</span>
+            <select id="prioritySelect">
+              <option value="engage">Engage</option>
+              <option value="damage">Degats</option>
+              <option value="frontline">Frontline</option>
+              <option value="cc">Crowd control</option>
+              <option value="scaling">Scaling</option>
+            </select>
+          </label>
+        </div>
+
+        <button id="generateBtn" class="generate-btn">Generer une composition</button>
+
+        <div class="tips">
+          <h3>Comment le score est calcule</h3>
+          <ul>
+            <li>Presence d'un front line fiable</li>
+            <li>Bon melange AD / AP</li>
+            <li>Controle de foule et initiation</li>
+            <li>Synergies avec le style choisi</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="panel result-panel">
+        <div class="result-header">
+          <div>
+            <p class="card-label">Composition proposee</p>
+            <h2 id="compTitle">Aucune generation pour le moment</h2>
+          </div>
+          <div class="score-badge">
+            <span>Score</span>
+            <strong id="scoreValue">--</strong>
+          </div>
+        </div>
+
+        <div id="compositionGrid" class="composition-grid"></div>
+
+        <div class="analysis-grid">
+          <article class="mini-panel">
+            <h3>Forces</h3>
+            <ul id="strengthList"></ul>
+          </article>
+          <article class="mini-panel">
+            <h3>Points d'attention</h3>
+            <ul id="warningList"></ul>
+          </article>
+        </div>
+
+        <article class="summary-panel">
+          <h3>Lecture rapide</h3>
+          <p id="summaryText">
+            Lance une generation pour voir une proposition de draft avec son analyse.
+          </p>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
