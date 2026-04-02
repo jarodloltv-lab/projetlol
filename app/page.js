@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   roleOrder,
   roleLabels,
@@ -10,12 +10,12 @@ import {
   priorityTags,
   riskTags,
   generateBestComposition,
-  teamChampionOptions,
+  getTeamChampionOptions,
   formatTag,
   getChampionPortrait,
   getChampionPickReasons,
   getChampionProfile,
-  dataDragonVersion,
+  getChampionMatchupInsights,
   botlaneSynergySource
 } from "../lib/lol-data";
 
@@ -49,62 +49,10 @@ export default function HomePage() {
     support: ""
   });
   const [openPickerRole, setOpenPickerRole] = useState(null);
-  const [allChampions, setAllChampions] = useState([]);
   const [metaSnapshot, setMetaSnapshot] = useState(null);
-  const [search, setSearch] = useState("");
-  const [loadingChampions, setLoadingChampions] = useState(true);
-  const [loadingError, setLoadingError] = useState("");
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [metaError, setMetaError] = useState("");
   const [selectedChampion, setSelectedChampion] = useState(null);
-  const deferredSearch = useDeferredValue(search);
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadChampions() {
-      try {
-        setLoadingChampions(true);
-        setLoadingError("");
-
-        const response = await fetch(
-          `https://ddragon.leagueoflegends.com/cdn/${dataDragonVersion}/data/en_US/champion.json`
-        );
-
-        if (!response.ok) {
-          throw new Error("Impossible de recuperer les champions.");
-        }
-
-        const payload = await response.json();
-        const champions = Object.values(payload.data)
-          .map((champion) => ({
-            id: champion.id,
-            name: champion.name,
-            image: `https://ddragon.leagueoflegends.com/cdn/${dataDragonVersion}/img/champion/${champion.image.full}`,
-            tags: champion.tags
-          }))
-          .sort((first, second) => first.name.localeCompare(second.name));
-
-        if (active) {
-          setAllChampions(champions);
-        }
-      } catch (error) {
-        if (active) {
-          setLoadingError("La galerie n'a pas pu etre chargee.");
-        }
-      } finally {
-        if (active) {
-          setLoadingChampions(false);
-        }
-      }
-    }
-
-    loadChampions();
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -143,18 +91,38 @@ export default function HomePage() {
     };
   }, []);
 
-  const visibleChampions = allChampions.filter((champion) => {
-    const query = deferredSearch.trim().toLowerCase();
+  useEffect(() => {
+    const liveConnected = metaSnapshot?.liveConnected ?? metaSnapshot?.connected;
 
-    if (!query) {
-      return true;
+    if (!liveConnected) {
+      return undefined;
     }
 
-    return (
-      champion.name.toLowerCase().includes(query) ||
-      champion.tags.some((tag) => tag.toLowerCase().includes(query))
-    );
-  });
+    const currentMatches = metaSnapshot.sampleMatches || 0;
+    const targetMatches = metaSnapshot.requestBudget?.targetMatches || 0;
+
+    if (!targetMatches || currentMatches >= targetMatches) {
+      return undefined;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        const response = await fetch("/api/meta");
+        const payload = await response.json();
+
+        if (!response.ok) {
+          throw new Error(payload?.message || "Erreur meta.");
+        }
+
+        setMetaSnapshot(payload);
+        regenerateWithMode(payload.byChampion || {}, customizeDraft, filters, appliedSelection);
+      } catch (error) {
+        setMetaError("La meta live n'a pas pu etre chargee.");
+      }
+    }, 65000);
+
+    return () => clearTimeout(timeoutId);
+  }, [metaSnapshot, customizeDraft, filters, appliedSelection]);
 
   function updateFilter(key, value) {
     const nextFilters = { ...filters, [key]: value };
@@ -184,7 +152,14 @@ export default function HomePage() {
   function updateSelectedRole(role, championId) {
     const nextSelection = { ...selectedByRole, [role]: championId };
     setSelectedByRole(nextSelection);
+    setAppliedSelection(nextSelection);
     setOpenPickerRole(null);
+    regenerateWithMode(
+      metaSnapshot?.byChampion || {},
+      customizeDraft,
+      customizeDraft ? filters : appliedFilters,
+      nextSelection
+    );
   }
 
   function applySelection() {
@@ -200,14 +175,20 @@ export default function HomePage() {
   function openChampionDetails(champion) {
     const profile = getChampionProfile(champion.imageId);
     const meta = metaSnapshot?.byChampion?.[champion.imageId] || null;
+    const matchupInsights = getChampionMatchupInsights(champion, metaSnapshot?.byChampion || {});
 
     setSelectedChampion({
       champion,
       profile,
       meta,
-      reasons: getChampionPickReasons(champion, metaSnapshot?.byChampion || {})
+      reasons: getChampionPickReasons(champion, metaSnapshot?.byChampion || {}),
+      matchupInsights
     });
   }
+
+  const groupedMetaChampions = getMetaChampionsByRole(metaSnapshot);
+  const riotLiveConnected = metaSnapshot?.liveConnected ?? metaSnapshot?.connected ?? false;
+  const teamOptionsByRole = getTeamChampionOptions(metaSnapshot?.byChampion || {});
 
   return (
     <main className="page-shell">
@@ -346,8 +327,9 @@ export default function HomePage() {
                 <p>Source: {metaSnapshot.source}</p>
                 <p>Patch: {metaSnapshot.patch}</p>
                 <p>
-                  Connexion Riot: {metaSnapshot.connected ? "active" : "a configurer"}
+                  Connexion Riot: {riotLiveConnected ? "active" : metaSnapshot.connected ? "hors ligne, echantillon local actif" : "a configurer"}
                 </p>
+                {metaSnapshot.message ? <p>{metaSnapshot.message}</p> : null}
               </>
             ) : null}
           </div>
@@ -417,7 +399,7 @@ export default function HomePage() {
                         <small>Le générateur choisit le meilleur pick selon la compo.</small>
                       </button>
                       <div className="botlane-picker-grid">
-                        {teamChampionOptions[champion.role].map((option) => (
+                        {teamOptionsByRole[champion.role].map((option) => (
                           <button
                             type="button"
                             key={`${champion.role}-${option.imageId}`}
@@ -497,8 +479,10 @@ export default function HomePage() {
             <div>
               <h3>Meta</h3>
               <p>
-                {metaSnapshot?.connected
+                {riotLiveConnected
                   ? "Le score tient compte de la popularite, du winrate et des postes reels recents."
+                  : metaSnapshot?.connected
+                  ? "Le score continue d'utiliser l'echantillon ranked local deja enregistre."
                   : "Mode prototype tant que RIOT_API_KEY n'est pas configuree."}
               </p>
             </div>
@@ -521,31 +505,55 @@ export default function HomePage() {
         <div className="gallery-header">
           <div>
             <p className="card-label">Meta live</p>
-            <h2>Top picks echantillonnes sur Riot API</h2>
+            <h2>Top picks par poste sur Riot API</h2>
             <p className="hero-text compact">
               {metaSnapshot?.connected
                 ? `Echantillon ${metaSnapshot.sampleMatches} matchs, ${metaSnapshot.samplePlayers} joueurs, region ${metaSnapshot.region}.`
                 : "Ajoutez une cle Riot API pour activer cette section avec de vraies donnees."}
             </p>
+            {metaSnapshot?.connected && !riotLiveConnected ? (
+              <p className="hero-text compact">
+                Connexion live indisponible, affichage du dernier echantillon ranked enregistre.
+              </p>
+            ) : null}
+            {metaSnapshot?.connected && metaSnapshot?.requestBudget?.targetMatches ? (
+              <p className="hero-text compact">
+                Progression auto: {metaSnapshot.sampleMatches} / {metaSnapshot.requestBudget.targetMatches} matchs accumules.
+              </p>
+            ) : null}
           </div>
         </div>
 
-        {metaSnapshot?.topChampions?.length ? (
-          <div className="meta-champion-grid">
-            {metaSnapshot.topChampions.map((champion) => (
-              <article className="meta-champion-card" key={champion.id}>
-                <img
-                  className="meta-champion-image"
-                  src={getChampionPortrait(champion.id)}
-                  alt={champion.name}
-                />
-                <div className="meta-champion-body">
-                  <h3>{champion.name}</h3>
-                  <p>Win rate: {formatPercent(champion.winRate)}</p>
-                  <p>Pick rate: {formatPercent(champion.pickRate)}</p>
-                  <p>Parties: {champion.games}</p>
+        {groupedMetaChampions.length ? (
+          <div className="meta-role-sections">
+            {groupedMetaChampions.map(({ role, champions }) => (
+              <section className="meta-role-row" key={role}>
+                <div className="meta-role-heading">
+                  <span className="champion-role">
+                    <RoleIcon role={role} />
+                    {roleLabels[role]}
+                  </span>
+                  <p>{champions.length} top picks suivis sur ce poste</p>
                 </div>
-              </article>
+
+                <div className="meta-champion-grid">
+                  {champions.map((champion) => (
+                    <article className="meta-champion-card" key={`${role}-${champion.id}`}>
+                      <img
+                        className="meta-champion-image"
+                        src={getChampionPortrait(champion.id)}
+                        alt={champion.name}
+                      />
+                      <div className="meta-champion-body">
+                        <h3>{champion.name}</h3>
+                        <p>Win rate: {formatPercent(champion.winRate)}</p>
+                        <p>Pick rate: {formatPercent(champion.pickRate)}</p>
+                        <p>Parties: {champion.games}</p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
         ) : (
@@ -555,54 +563,6 @@ export default function HomePage() {
               : "Pas encore de stats live affichables."}
           </p>
         )}
-      </section>
-
-      <section className="panel gallery-panel">
-        <div className="gallery-header">
-          <div>
-            <p className="card-label">Galerie officielle</p>
-            <h2>Tous les portraits des champions</h2>
-            <p className="hero-text compact">
-              Source officielle Riot Data Dragon, version {dataDragonVersion}.
-            </p>
-          </div>
-
-          <label className="search-box">
-            <span>Rechercher un champion ou un role</span>
-            <input
-              type="text"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Ex: Ahri, Tank, Marksman..."
-            />
-          </label>
-        </div>
-
-        {loadingChampions ? (
-          <p className="gallery-state">Chargement des portraits...</p>
-        ) : null}
-
-        {loadingError ? <p className="gallery-state warning-text">{loadingError}</p> : null}
-
-        {!loadingChampions && !loadingError ? (
-          <>
-            <p className="gallery-count">
-              {visibleChampions.length} champion{visibleChampions.length > 1 ? "s" : ""}
-            </p>
-
-            <div className="gallery-grid">
-              {visibleChampions.map((champion) => (
-                <article className="gallery-card" key={champion.id}>
-                  <img className="gallery-image" src={champion.image} alt={champion.name} />
-                  <div className="gallery-card-body">
-                    <h3>{champion.name}</h3>
-                    <p>{champion.tags.join(" / ")}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </>
-        ) : null}
       </section>
 
       {selectedChampion ? (
@@ -671,21 +631,23 @@ export default function HomePage() {
                 </ul>
               </section>
 
-              <section className="mini-panel">
-                <h3>Synergie botlane</h3>
-                {selectedChampion.champion.botlaneSynergy ? (
-                  <ul>
-                    <li>Duo vu en competition recente avec {selectedChampion.champion.botlaneSynergy.partnerName}</li>
-                    <li>Win rate recent: {formatPercent(selectedChampion.champion.botlaneSynergy.winRate)}</li>
+              {["adc", "support"].includes(selectedChampion.champion.role) ? (
+                <section className="mini-panel">
+                  <h3>Synergie botlane</h3>
+                  {selectedChampion.champion.botlaneSynergy ? (
+                    <ul>
+                      <li>Duo vu en competition recente avec {selectedChampion.champion.botlaneSynergy.partnerName}</li>
+                      <li>Win rate recent: {formatPercent(selectedChampion.champion.botlaneSynergy.winRate)}</li>
                       <li>Games PRO analysees: {selectedChampion.champion.botlaneSynergy.games}</li>
-                    <li>Source: LEC / LCK / LPL sur les 3 a 6 derniers mois</li>
-                  </ul>
-                ) : (
-                  <ul>
-                    <li>Pas de duo botlane pro recent remonte pour cette draft.</li>
-                  </ul>
-                )}
-              </section>
+                      <li>Source: LEC / LCK / LPL sur les 3 a 6 derniers mois</li>
+                    </ul>
+                  ) : (
+                    <ul>
+                      <li>Pas de duo botlane pro recent remonte pour cette draft.</li>
+                    </ul>
+                  )}
+                </section>
+              ) : null}
 
               <section className="mini-panel">
                 <h3>Ratings champion</h3>
@@ -695,6 +657,38 @@ export default function HomePage() {
                   <li>Control: {selectedChampion.profile?.attributeRatings?.control ?? "N/A"}</li>
                   <li>Mobility: {selectedChampion.profile?.attributeRatings?.mobility ?? "N/A"}</li>
                   <li>Utility: {selectedChampion.profile?.attributeRatings?.utility ?? "N/A"}</li>
+                </ul>
+              </section>
+
+              <section className="mini-panel">
+                <h3>Ce champion est fort contre</h3>
+                <ul className="matchup-list">
+                  {(selectedChampion.matchupInsights?.favorable || []).map((entry) => (
+                    <li key={`fav-${entry.id}`} className="matchup-item">
+                      <img
+                        className="matchup-item-image"
+                        src={getChampionPortrait(entry.id)}
+                        alt={entry.name}
+                      />
+                      <span>{entry.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              <section className="mini-panel">
+                <h3>Ce champion souffre contre</h3>
+                <ul className="matchup-list">
+                  {(selectedChampion.matchupInsights?.difficult || []).map((entry) => (
+                    <li key={`weak-${entry.id}`} className="matchup-item">
+                      <img
+                        className="matchup-item-image"
+                        src={getChampionPortrait(entry.id)}
+                        alt={entry.name}
+                      />
+                      <span>{entry.reason}</span>
+                    </li>
+                  ))}
                 </ul>
               </section>
             </div>
@@ -752,7 +746,8 @@ function getDisplayedChampionName(role, selection, fallbackChampion) {
     return fallbackChampion.name;
   }
 
-  return teamChampionOptions[role].find((champion) => champion.imageId === selectedId)?.name || fallbackChampion.name;
+  const options = getTeamChampionOptions();
+  return options[role].find((champion) => champion.imageId === selectedId)?.name || fallbackChampion.name;
 }
 
 function getDisplayedChampionImageId(role, selection, fallbackChampion) {
@@ -854,4 +849,28 @@ function formatRecentRole(meta) {
   };
 
   return labels[best] || "N/A";
+}
+
+function getMetaChampionsByRole(metaSnapshot) {
+  const champions = Object.values(metaSnapshot?.byChampion || {});
+
+  if (!champions.length) {
+    return [];
+  }
+
+  return roleOrder
+    .map((role) => ({
+      role,
+      champions: champions
+        .filter((champion) => formatRecentRole(champion).toLowerCase() === roleLabels[role].toLowerCase())
+        .sort((first, second) => {
+          if (second.pickRate !== first.pickRate) {
+            return second.pickRate - first.pickRate;
+          }
+
+          return second.winRate - first.winRate;
+        })
+        .slice(0, 5)
+    }))
+    .filter((group) => group.champions.length);
 }

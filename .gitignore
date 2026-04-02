@@ -2,6 +2,7 @@
 node_modules/
 .vercel/
 .env.local
+data/riot-rolling-store.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

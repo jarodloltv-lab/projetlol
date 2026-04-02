@@ -5,16 +5,20 @@ import {
   styleProfiles,
   priorityTags,
   generateBestBotlane,
+  evaluateBotlaneDuo,
   getBotlaneVariants,
+  getBotlaneMatchupAlternatives,
   getTopRecentBotlanes,
   getBotlaneDuoInsights,
   getBotlaneDuoSummary,
   formatBotlanePowerWindows,
   botlaneProfileSource,
-  botlaneChampionOptions,
+  getBotlaneChampionOptions,
   formatTag,
+  getChampionMatchupInsights,
   getChampionPortrait,
-  getChampionProfile
+  getChampionProfile,
+  championPool
 } from "../../lib/lol-data";
 
 const defaultFilters = {
@@ -32,6 +36,8 @@ export default function BotlanePage() {
   const [customizeDraft, setCustomizeDraft] = useState(false);
   const [selectedAdcId, setSelectedAdcId] = useState("");
   const [selectedSupportId, setSelectedSupportId] = useState("");
+  const [selectedEnemyAdcId, setSelectedEnemyAdcId] = useState("");
+  const [selectedEnemySupportId, setSelectedEnemySupportId] = useState("");
   const [openPickerRole, setOpenPickerRole] = useState(null);
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [metaSnapshot, setMetaSnapshot] = useState(null);
@@ -39,9 +45,18 @@ export default function BotlanePage() {
   const [metaError, setMetaError] = useState("");
   const [result, setResult] = useState(null);
   const [variantDuos, setVariantDuos] = useState([]);
+  const [matchupAlternatives, setMatchupAlternatives] = useState({ adc: [], support: [] });
   const [topDuos, setTopDuos] = useState([]);
   const [selectedChampion, setSelectedChampion] = useState(null);
   const [selectedDuo, setSelectedDuo] = useState(null);
+  const riotLiveConnected = metaSnapshot?.liveConnected ?? metaSnapshot?.connected ?? false;
+  const botlaneOptions = getBotlaneChampionOptions(metaSnapshot?.byChampion || {});
+  const overlapIds = getBotlaneSuggestionOverlapIds(
+    selectedAdcId,
+    selectedSupportId,
+    variantDuos,
+    matchupAlternatives
+  );
 
   useEffect(() => {
     let active = true;
@@ -80,7 +95,13 @@ export default function BotlanePage() {
     };
   }, []);
 
-  function refreshPageState(metaByChampion, useCustomFilters, selectedFilters, lockedSelectionOverride) {
+  function refreshPageState(
+    metaByChampion,
+    useCustomFilters,
+    selectedFilters,
+    lockedSelectionOverride,
+    enemySelectionOverride
+  ) {
     const nextFilters = useCustomFilters ? selectedFilters : getRandomFilters();
     const lockedSelection =
       lockedSelectionOverride !== undefined
@@ -88,7 +109,9 @@ export default function BotlanePage() {
         : (selectedAdcId || selectedSupportId)
           ? { adcId: selectedAdcId || undefined, supportId: selectedSupportId || undefined }
           : null;
-    const nextResult = generateBestBotlane(nextFilters, metaByChampion, lockedSelection);
+    const enemySelection =
+      enemySelectionOverride !== undefined ? enemySelectionOverride : getCurrentEnemySelection();
+    const nextResult = generateBestBotlane(nextFilters, metaByChampion, lockedSelection, enemySelection);
     setAppliedFilters(nextFilters);
     setResult(nextResult);
     setVariantDuos(
@@ -96,9 +119,22 @@ export default function BotlanePage() {
         nextFilters,
         metaByChampion,
         lockedSelection,
+        enemySelection,
         3,
         nextResult?.pair?.duoId || `${nextResult?.adc?.imageId}::${nextResult?.support?.imageId}`
       )
+    );
+    setMatchupAlternatives(
+      nextResult
+        ? getBotlaneMatchupAlternatives(
+            nextFilters,
+            metaByChampion,
+            nextResult.adc.imageId,
+            nextResult.support.imageId,
+            enemySelection,
+            2
+          )
+        : { adc: [], support: [] }
     );
     setTopDuos(getTopRecentBotlanes(metaByChampion, 16));
   }
@@ -106,6 +142,15 @@ export default function BotlanePage() {
   function getCurrentLockedSelection(nextAdcId = selectedAdcId, nextSupportId = selectedSupportId) {
     return nextAdcId || nextSupportId
       ? { adcId: nextAdcId || undefined, supportId: nextSupportId || undefined }
+      : null;
+  }
+
+  function getCurrentEnemySelection(nextEnemyAdcId = selectedEnemyAdcId, nextEnemySupportId = selectedEnemySupportId) {
+    return nextEnemyAdcId || nextEnemySupportId
+      ? {
+          adc: nextEnemyAdcId ? championPool.lookup.adc[nextEnemyAdcId] || null : null,
+          support: nextEnemySupportId ? championPool.lookup.support[nextEnemySupportId] || null : null
+        }
       : null;
   }
 
@@ -146,16 +191,95 @@ export default function BotlanePage() {
     );
   }
 
+  function updateSelectedEnemyAdc(value) {
+    setSelectedEnemyAdcId(value);
+    setOpenPickerRole(null);
+    const enemySelection = getCurrentEnemySelection(value, selectedEnemySupportId);
+    const currentResult = result
+      ? evaluateBotlaneDuo(
+          customizeDraft ? filters : appliedFilters,
+          result.adc.imageId,
+          result.support.imageId,
+          metaSnapshot?.byChampion || {},
+          enemySelection
+        )
+      : null;
+
+    if (currentResult) {
+      setResult(currentResult);
+      setMatchupAlternatives(
+        getBotlaneMatchupAlternatives(
+          customizeDraft ? filters : appliedFilters,
+          metaSnapshot?.byChampion || {},
+          currentResult.adc.imageId,
+          currentResult.support.imageId,
+          enemySelection,
+          2
+        )
+      );
+      return;
+    }
+
+    refreshPageState(
+      metaSnapshot?.byChampion || {},
+      customizeDraft,
+      customizeDraft ? filters : appliedFilters,
+      getCurrentLockedSelection(),
+      enemySelection
+    );
+  }
+
+  function updateSelectedEnemySupport(value) {
+    setSelectedEnemySupportId(value);
+    setOpenPickerRole(null);
+    const enemySelection = getCurrentEnemySelection(selectedEnemyAdcId, value);
+    const currentResult = result
+      ? evaluateBotlaneDuo(
+          customizeDraft ? filters : appliedFilters,
+          result.adc.imageId,
+          result.support.imageId,
+          metaSnapshot?.byChampion || {},
+          enemySelection
+        )
+      : null;
+
+    if (currentResult) {
+      setResult(currentResult);
+      setMatchupAlternatives(
+        getBotlaneMatchupAlternatives(
+          customizeDraft ? filters : appliedFilters,
+          metaSnapshot?.byChampion || {},
+          currentResult.adc.imageId,
+          currentResult.support.imageId,
+          enemySelection,
+          2
+        )
+      );
+      return;
+    }
+
+    refreshPageState(
+      metaSnapshot?.byChampion || {},
+      customizeDraft,
+      customizeDraft ? filters : appliedFilters,
+      getCurrentLockedSelection(),
+      enemySelection
+    );
+  }
+
   function regenerate() {
     refreshPageState(metaSnapshot?.byChampion || {}, customizeDraft, filters);
   }
 
   function openChampionDetails(champion) {
+    const matchupInsights = getChampionMatchupInsights(champion, metaSnapshot?.byChampion || {});
+
     setSelectedChampion({
       champion,
       profile: getChampionProfile(champion.imageId),
       meta: metaSnapshot?.byChampion?.[champion.imageId] || null,
-      reasons: []
+      reasons: [],
+      matchupInsights
     });
   }
 
@@ -165,6 +289,47 @@ export default function BotlanePage() {
       insights: getBotlaneDuoInsights(duo.adc, duo.support, duo.pair),
       summary: getBotlaneDuoSummary(duo.adc, duo.support, duo.pair, metaSnapshot?.byChampion || {})
     });
+  }
+
+  function applySuggestedDuo(duo) {
+    const nextAdcId = selectedSupportId && !selectedAdcId ? duo.adc.imageId : duo.adc.imageId;
+    const nextSupportId = selectedAdcId && !selectedSupportId ? duo.support.imageId : duo.support.imageId;
+
+    setSelectedAdcId(nextAdcId);
+    setSelectedSupportId(nextSupportId);
+    setOpenPickerRole(null);
+
+    refreshPageState(
+      metaSnapshot?.byChampion || {},
+      customizeDraft,
+      customizeDraft ? filters : appliedFilters,
+      getCurrentLockedSelection(nextAdcId, nextSupportId)
+    );
+  }
+
+  function applySuggestedRolePick(role, duo) {
+    if (role === "adc") {
+      const nextAdcId = duo.adc.imageId;
+      setSelectedAdcId(nextAdcId);
+      setOpenPickerRole(null);
+      refreshPageState(
+        metaSnapshot?.byChampion || {},
+        customizeDraft,
+        customizeDraft ? filters : appliedFilters,
+        getCurrentLockedSelection(nextAdcId, selectedSupportId)
+      );
+      return;
+    }
+
+    const nextSupportId = duo.support.imageId;
+    setSelectedSupportId(nextSupportId);
+    setOpenPickerRole(null);
+    refreshPageState(
+      metaSnapshot?.byChampion || {},
+      customizeDraft,
+      customizeDraft ? filters : appliedFilters,
+      getCurrentLockedSelection(selectedAdcId, nextSupportId)
+    );
   }
 
   return (
@@ -280,7 +445,10 @@ export default function BotlanePage() {
             {metaSnapshot ? (
               <>
                 <p>Patch: {metaSnapshot.patch}</p>
-                <p>Connexion Riot: {metaSnapshot.connected ? "active" : "a configurer"}</p>
+                <p>
+                  Connexion Riot: {riotLiveConnected ? "active" : metaSnapshot.connected ? "hors ligne, echantillon local actif" : "a configurer"}
+                </p>
+                {metaSnapshot.message ? <p>{metaSnapshot.message}</p> : null}
               </>
             ) : null}
           </div>
@@ -350,8 +518,8 @@ export default function BotlanePage() {
                       </button>
                       <div className="botlane-picker-grid">
                         {(champion.role === "adc"
-                          ? botlaneChampionOptions.adc
-                          : botlaneChampionOptions.support
+                          ? botlaneOptions.adc
+                          : botlaneOptions.support
                         ).map((option) => (
                           <button
                             type="button"
@@ -374,6 +542,39 @@ export default function BotlanePage() {
                       </div>
                     </div>
                   ) : null}
+                </div>
+                <div className="botlane-enemy-inline">
+                  <CompactEnemyPicker
+                    label={champion.role === "adc" ? "ADC adverse" : "Support adverse"}
+                    helper={
+                      champion.role === "adc"
+                        ? selectedEnemyAdcId
+                          ? "Versus ADC actif"
+                          : "Choisir l'ADC en face"
+                        : selectedEnemySupportId
+                          ? "Versus support actif"
+                          : "Choisir le support en face"
+                    }
+                    value={champion.role === "adc" ? selectedEnemyAdcId : selectedEnemySupportId}
+                    options={getEnemyOptions(
+                      champion.role,
+                      result?.adc?.imageId,
+                      result?.support?.imageId,
+                      champion.role === "adc" ? selectedEnemyAdcId : selectedEnemySupportId
+                    )}
+                    pickerKey={champion.role === "adc" ? "enemy-adc" : "enemy-support"}
+                    isOpen={openPickerRole === (champion.role === "adc" ? "enemy-adc" : "enemy-support")}
+                    onToggle={() =>
+                      setOpenPickerRole((current) =>
+                        current === (champion.role === "adc" ? "enemy-adc" : "enemy-support")
+                          ? null
+                          : champion.role === "adc"
+                            ? "enemy-adc"
+                            : "enemy-support"
+                      )
+                    }
+                    onSelect={champion.role === "adc" ? updateSelectedEnemyAdc : updateSelectedEnemySupport}
+                  />
                 </div>
                 <button
                   type="button"
@@ -398,27 +599,47 @@ export default function BotlanePage() {
                     </p>
                     <div className="inline-variants-list">
                       {variantDuos.map((duo) => (
-                        <button
-                          type="button"
-                          className="inline-variant-item"
+                        <div
+                          className={`inline-variant-item ${
+                            isVariantOverlapPick(duo, selectedAdcId, selectedSupportId, overlapIds) ? "overlap-pick" : ""
+                          }`}
                           key={`inline-${duo.pair?.duoId || `${duo.adc.imageId}-${duo.support.imageId}`}`}
-                          onClick={() => openDuoDetails(duo)}
                         >
-                          <div className="inline-variant-head">
-                            <img
-                              src={getChampionPortrait(
-                                selectedSupportId ? duo.adc.imageId : duo.support.imageId
-                              )}
-                              alt={getVariantPartnerName(duo, selectedAdcId, selectedSupportId)}
-                            />
-                            <strong>{getVariantPartnerName(duo, selectedAdcId, selectedSupportId)}</strong>
-                          </div>
-                          <small>
-                            {duo.pair
-                              ? `Duo vu en competition recente • ${duo.pair?.games || 0} games PRO`
-                              : getRankedFallbackShortLabel(duo.rankedFallback)}
-                          </small>
-                        </button>
+                          <button
+                            type="button"
+                            className="inline-variant-main"
+                            onClick={() => openDuoDetails(duo)}
+                          >
+                            <div className="inline-variant-head">
+                              <img
+                                src={getChampionPortrait(
+                                  selectedSupportId ? duo.adc.imageId : duo.support.imageId
+                                )}
+                                alt={getVariantPartnerName(duo, selectedAdcId, selectedSupportId)}
+                              />
+                              <div>
+                                <strong>{getVariantPartnerName(duo, selectedAdcId, selectedSupportId)}</strong>
+                                {isVariantOverlapPick(duo, selectedAdcId, selectedSupportId, overlapIds) ? (
+                                  <span className="overlap-badge">Synergie + contre</span>
+                                ) : null}
+                              </div>
+                            </div>
+                            <small>
+                              {duo.pair
+                                ? `Duo vu en competition recente • ${duo.pair?.games || 0} games PRO`
+                                : getRankedFallbackShortLabel(duo.rankedFallback)}
+                            </small>
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-variant-apply"
+                            onClick={() => applySuggestedDuo(duo)}
+                            aria-label={`Valider ${getVariantPartnerName(duo, selectedAdcId, selectedSupportId)}`}
+                            title="Utiliser ce pick"
+                          >
+                            ✓
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -427,51 +648,89 @@ export default function BotlanePage() {
             ))}
           </div>
 
-          <div className="analysis-grid">
-            <article className="mini-panel">
-              <h3>Forces du duo</h3>
-              <ul>
-                {result.strengths.map((item) => (
-                  <li key={item}>{item}</li>
-                ))}
-              </ul>
-            </article>
+          {(matchupAlternatives.adc.length || matchupAlternatives.support.length) ? (
+            <article className="details-panel matchup-alternatives-panel">
+              {matchupAlternatives.adc.length ? (
+                <div>
+                  <h3>2 ADC plus viables</h3>
+                  <div className="inline-variants-list">
+                    {matchupAlternatives.adc.map((duo) => (
+                      <div
+                        className={`inline-variant-item ${overlapIds.adc.has(duo.adc.imageId) ? "overlap-pick" : ""}`}
+                        key={`matchup-adc-${duo.adc.imageId}-${duo.support.imageId}`}
+                      >
+                        <button
+                          type="button"
+                          className="inline-variant-main"
+                          onClick={() => openDuoDetails(duo)}
+                        >
+                          <div className="inline-variant-head">
+                            <img src={getChampionPortrait(duo.adc.imageId)} alt={duo.adc.name} />
+                            <div>
+                              <strong>{duo.adc.name}</strong>
+                              {overlapIds.adc.has(duo.adc.imageId) ? (
+                                <span className="overlap-badge">Synergie + contre</span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <small>Score duo: {duo.score}</small>
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-variant-apply"
+                          onClick={() => applySuggestedRolePick("adc", duo)}
+                          aria-label={`Valider ${duo.adc.name}`}
+                          title="Utiliser cet ADC"
+                        >
+                          ✓
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
-            <article className="mini-panel">
-              <h3>Points d'attention</h3>
-              <ul>
-                {result.warnings.map((item) => (
-                  <li key={item} className="warning">{item}</li>
-                ))}
-              </ul>
-            </article>
-          </div>
-
-          {result.performanceProfile ? (
-            <article className="details-panel">
-              <div>
-                <h3>Fenetre forte</h3>
-                <p>{formatBotlanePowerWindows(result.performanceProfile)}</p>
-              </div>
-              <div>
-                <h3>Lane</h3>
-                <p>{humanizeLaneAssessment(result.performanceProfile.laneAssessment)}</p>
-              </div>
-              <div>
-                <h3>Lecture tempo</h3>
-                <p>{humanizeTimingProfile(result.performanceProfile)}</p>
-              </div>
-              <div>
-                <h3>Source</h3>
-                <p>{result.pair ? botlaneProfileSource : getBotlaneSourceLabel(result.rankedFallback)}</p>
-              </div>
+              {matchupAlternatives.support.length ? (
+                <div>
+                  <h3>2 supports plus viables</h3>
+                  <div className="inline-variants-list">
+                    {matchupAlternatives.support.map((duo) => (
+                      <div
+                        className={`inline-variant-item ${overlapIds.support.has(duo.support.imageId) ? "overlap-pick" : ""}`}
+                        key={`matchup-support-${duo.adc.imageId}-${duo.support.imageId}`}
+                      >
+                        <button
+                          type="button"
+                          className="inline-variant-main"
+                          onClick={() => openDuoDetails(duo)}
+                        >
+                          <div className="inline-variant-head">
+                            <img src={getChampionPortrait(duo.support.imageId)} alt={duo.support.name} />
+                            <div>
+                              <strong>{duo.support.name}</strong>
+                              {overlapIds.support.has(duo.support.imageId) ? (
+                                <span className="overlap-badge">Synergie + contre</span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <small>Score duo: {duo.score}</small>
+                        </button>
+                        <button
+                          type="button"
+                          className="inline-variant-apply"
+                          onClick={() => applySuggestedRolePick("support", duo)}
+                          aria-label={`Valider ${duo.support.name}`}
+                          title="Utiliser ce support"
+                        >
+                          ✓
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </article>
           ) : null}
-
-            <article className="summary-panel">
-              <h3>Lecture rapide</h3>
-              <p>{result.summary}</p>
-            </article>
             </>
           ) : (
             <article className="summary-panel">
@@ -689,6 +948,38 @@ export default function BotlanePage() {
                   </ul>
                 )}
               </section>
+
+              <section className="mini-panel">
+                <h3>Ce champion est fort contre</h3>
+                <ul className="matchup-list">
+                  {(selectedChampion.matchupInsights?.favorable || []).map((entry) => (
+                    <li key={`botlane-fav-${entry.id}`} className="matchup-item">
+                      <img
+                        className="matchup-item-image"
+                        src={getChampionPortrait(entry.id)}
+                        alt={entry.name}
+                      />
+                      <span>{entry.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              <section className="mini-panel">
+                <h3>Ce champion souffre contre</h3>
+                <ul className="matchup-list">
+                  {(selectedChampion.matchupInsights?.difficult || []).map((entry) => (
+                    <li key={`botlane-weak-${entry.id}`} className="matchup-item">
+                      <img
+                        className="matchup-item-image"
+                        src={getChampionPortrait(entry.id)}
+                        alt={entry.name}
+                      />
+                      <span>{entry.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             </div>
           </article>
         </div>
@@ -750,7 +1041,7 @@ function humanizeTimingProfile(profile) {
 }
 
 function getChampionNameByRole(role, championId) {
-  const options = role === "adc" ? botlaneChampionOptions.adc : botlaneChampionOptions.support;
+  const options = getBotlaneChampionOptions()[role === "adc" ? "adc" : "support"];
   return options.find((champion) => champion.imageId === championId)?.name || championId;
 }
 
@@ -844,6 +1135,123 @@ function getRankedFallbackShortLabel(rankedFallback) {
   }
 
   return `Lecture ranked • ${Math.round(rankedFallback.averageWinRate * 100)}% WR`;
+}
+
+function getBotlaneSuggestionOverlapIds(
+  selectedAdcId,
+  selectedSupportId,
+  variantDuos,
+  matchupAlternatives
+) {
+  const adc = new Set();
+  const support = new Set();
+
+  if (selectedSupportId && !selectedAdcId) {
+    const variantAdcIds = new Set(variantDuos.map((duo) => duo.adc.imageId));
+    matchupAlternatives.adc.forEach((duo) => {
+      if (variantAdcIds.has(duo.adc.imageId)) {
+        adc.add(duo.adc.imageId);
+      }
+    });
+  }
+
+  if (selectedAdcId && !selectedSupportId) {
+    const variantSupportIds = new Set(variantDuos.map((duo) => duo.support.imageId));
+    matchupAlternatives.support.forEach((duo) => {
+      if (variantSupportIds.has(duo.support.imageId)) {
+        support.add(duo.support.imageId);
+      }
+    });
+  }
+
+  return { adc, support };
+}
+
+function isVariantOverlapPick(duo, selectedAdcId, selectedSupportId, overlapIds) {
+  if (selectedSupportId && !selectedAdcId) {
+    return overlapIds.adc.has(duo.adc.imageId);
+  }
+
+  if (selectedAdcId && !selectedSupportId) {
+    return overlapIds.support.has(duo.support.imageId);
+  }
+
+  return false;
+}
+
+function getEnemyOptions(role, alliedAdcId, alliedSupportId, currentSelectedId = "") {
+  const options = getBotlaneChampionOptions()[role === "adc" ? "adc" : "support"];
+
+  return options.filter((option) => {
+    if (option.imageId === currentSelectedId) {
+      return true;
+    }
+
+    if (role === "adc") {
+      return option.imageId !== alliedAdcId;
+    }
+
+    return option.imageId !== alliedSupportId;
+  });
+}
+
+function CompactEnemyPicker({
+  label,
+  helper,
+  value,
+  options,
+  isOpen,
+  onToggle,
+  onSelect
+}) {
+  const selectedOption = options.find((option) => option.imageId === value) || null;
+
+  return (
+    <div className="compact-enemy-picker">
+      <span>{label}</span>
+      <button
+        type="button"
+        className="compact-enemy-trigger"
+        onClick={onToggle}
+      >
+        <div className="compact-enemy-trigger-main">
+          {selectedOption ? (
+            <img src={getChampionPortrait(selectedOption.imageId)} alt={selectedOption.name} />
+          ) : (
+            <span className="compact-enemy-placeholder">?</span>
+          )}
+          <strong>{selectedOption ? selectedOption.name : label}</strong>
+        </div>
+        <small>{helper}</small>
+      </button>
+      {isOpen ? (
+        <div className="compact-enemy-panel botlane-picker-panel">
+          <button
+            type="button"
+            className="botlane-picker-option auto"
+            onClick={() => onSelect("")}
+          >
+            <span className="botlane-picker-auto-badge">Auto</span>
+            <strong>{label} automatique</strong>
+            <small>Le matchup reste libre si vous ne forcez pas ce champion.</small>
+          </button>
+          <div className="botlane-picker-grid compact-enemy-grid">
+            {options.map((option) => (
+              <button
+                type="button"
+                key={`${label}-${option.imageId}`}
+                className={`botlane-picker-option ${value === option.imageId ? "active" : ""}`}
+                onClick={() => onSelect(option.imageId)}
+              >
+                <img src={getChampionPortrait(option.imageId)} alt={option.name} />
+                <strong>{option.name}</strong>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function InlineRoleLabel({ role, label }) {
