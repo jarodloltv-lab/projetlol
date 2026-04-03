@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   styleProfiles,
   priorityTags,
@@ -18,6 +18,7 @@ import {
   getChampionMatchupInsights,
   getChampionPortrait,
   getChampionProfile,
+  getChampionMetaForRole,
   championPool
 } from "../../lib/lol-data";
 
@@ -30,6 +31,7 @@ const defaultFilters = {
 const styleKeys = ["teamfight", "pick", "poke", "protect", "wombo"];
 const riskKeys = ["safe", "balanced", "spicy"];
 const priorityKeys = Object.keys(priorityTags);
+const defaultBotlaneOptions = getBotlaneChampionOptions();
 
 export default function BotlanePage() {
   const [filters, setFilters] = useState(defaultFilters);
@@ -39,6 +41,7 @@ export default function BotlanePage() {
   const [selectedEnemyAdcId, setSelectedEnemyAdcId] = useState("");
   const [selectedEnemySupportId, setSelectedEnemySupportId] = useState("");
   const [openPickerRole, setOpenPickerRole] = useState(null);
+  const [pickerSearch, setPickerSearch] = useState({});
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [metaSnapshot, setMetaSnapshot] = useState(null);
   const [loadingMeta, setLoadingMeta] = useState(true);
@@ -50,12 +53,18 @@ export default function BotlanePage() {
   const [selectedChampion, setSelectedChampion] = useState(null);
   const [selectedDuo, setSelectedDuo] = useState(null);
   const riotLiveConnected = metaSnapshot?.liveConnected ?? metaSnapshot?.connected ?? false;
-  const botlaneOptions = getBotlaneChampionOptions(metaSnapshot?.byChampion || {});
-  const overlapIds = getBotlaneSuggestionOverlapIds(
-    selectedAdcId,
-    selectedSupportId,
-    variantDuos,
-    matchupAlternatives
+  const botlaneOptions = useMemo(
+    () => getBotlaneChampionOptions(metaSnapshot?.byChampion || {}),
+    [metaSnapshot?.byChampion]
+  );
+  const overlapIds = useMemo(
+    () => getBotlaneSuggestionOverlapIds(
+      selectedAdcId,
+      selectedSupportId,
+      variantDuos,
+      matchupAlternatives
+    ),
+    [selectedAdcId, selectedSupportId, variantDuos, matchupAlternatives]
   );
 
   useEffect(() => {
@@ -172,6 +181,7 @@ export default function BotlanePage() {
   function updateSelectedAdc(value) {
     setSelectedAdcId(value);
     setOpenPickerRole(null);
+    setPickerSearch((current) => ({ ...current, adc: "" }));
     refreshPageState(
       metaSnapshot?.byChampion || {},
       customizeDraft,
@@ -183,6 +193,7 @@ export default function BotlanePage() {
   function updateSelectedSupport(value) {
     setSelectedSupportId(value);
     setOpenPickerRole(null);
+    setPickerSearch((current) => ({ ...current, support: "" }));
     refreshPageState(
       metaSnapshot?.byChampion || {},
       customizeDraft,
@@ -194,6 +205,7 @@ export default function BotlanePage() {
   function updateSelectedEnemyAdc(value) {
     setSelectedEnemyAdcId(value);
     setOpenPickerRole(null);
+    setPickerSearch((current) => ({ ...current, "enemy-adc": "" }));
     const enemySelection = getCurrentEnemySelection(value, selectedEnemySupportId);
     const currentResult = result
       ? evaluateBotlaneDuo(
@@ -232,6 +244,7 @@ export default function BotlanePage() {
   function updateSelectedEnemySupport(value) {
     setSelectedEnemySupportId(value);
     setOpenPickerRole(null);
+    setPickerSearch((current) => ({ ...current, "enemy-support": "" }));
     const enemySelection = getCurrentEnemySelection(selectedEnemyAdcId, value);
     const currentResult = result
       ? evaluateBotlaneDuo(
@@ -490,7 +503,13 @@ export default function BotlanePage() {
                     type="button"
                     className="botlane-picker-trigger"
                     onClick={() =>
-                      setOpenPickerRole((current) => (current === champion.role ? null : champion.role))
+                      setOpenPickerRole((current) => {
+                        const nextRole = current === champion.role ? null : champion.role;
+                        if (nextRole) {
+                          setPickerSearch((search) => ({ ...search, [champion.role]: "" }));
+                        }
+                        return nextRole;
+                      })
                     }
                   >
                     <div className="botlane-picker-trigger-main">
@@ -505,6 +524,19 @@ export default function BotlanePage() {
                   </button>
                   {openPickerRole === champion.role ? (
                     <div className="botlane-picker-panel">
+                      <label className="botlane-picker-search">
+                        <input
+                          type="text"
+                          value={pickerSearch[champion.role] || ""}
+                          onChange={(event) =>
+                            setPickerSearch((current) => ({
+                              ...current,
+                              [champion.role]: event.target.value
+                            }))
+                          }
+                          placeholder="Rechercher un champion"
+                        />
+                      </label>
                       <button
                         type="button"
                         className="botlane-picker-option auto"
@@ -517,9 +549,9 @@ export default function BotlanePage() {
                         <small>Le générateur choisit le meilleur pick selon la data.</small>
                       </button>
                       <div className="botlane-picker-grid">
-                        {(champion.role === "adc"
-                          ? botlaneOptions.adc
-                          : botlaneOptions.support
+                        {filterPickerOptions(
+                          champion.role === "adc" ? botlaneOptions.adc : botlaneOptions.support,
+                          pickerSearch[champion.role]
                         ).map((option) => (
                           <button
                             type="button"
@@ -565,15 +597,23 @@ export default function BotlanePage() {
                     pickerKey={champion.role === "adc" ? "enemy-adc" : "enemy-support"}
                     isOpen={openPickerRole === (champion.role === "adc" ? "enemy-adc" : "enemy-support")}
                     onToggle={() =>
-                      setOpenPickerRole((current) =>
-                        current === (champion.role === "adc" ? "enemy-adc" : "enemy-support")
-                          ? null
-                          : champion.role === "adc"
-                            ? "enemy-adc"
-                            : "enemy-support"
-                      )
+                      setOpenPickerRole((current) => {
+                        const roleKey = champion.role === "adc" ? "enemy-adc" : "enemy-support";
+                        const nextRole = current === roleKey ? null : roleKey;
+                        if (nextRole) {
+                          setPickerSearch((search) => ({ ...search, [roleKey]: "" }));
+                        }
+                        return nextRole;
+                      })
                     }
                     onSelect={champion.role === "adc" ? updateSelectedEnemyAdc : updateSelectedEnemySupport}
+                    searchValue={pickerSearch[champion.role === "adc" ? "enemy-adc" : "enemy-support"] || ""}
+                    onSearchChange={(value) =>
+                      setPickerSearch((current) => ({
+                        ...current,
+                        [champion.role === "adc" ? "enemy-adc" : "enemy-support"]: value
+                      }))
+                    }
                   />
                 </div>
                 <button
@@ -924,14 +964,22 @@ export default function BotlanePage() {
                 </ul>
               </section>
 
-              <section className="mini-panel">
-                <h3>Meta recente</h3>
-                <ul>
-                  <li>Win rate: {selectedChampion.meta ? formatPercent(selectedChampion.meta.winRate) : "N/A"}</li>
-                  <li>Pick rate: {selectedChampion.meta ? formatPercent(selectedChampion.meta.pickRate) : "N/A"}</li>
-                  <li>Parties echantillonnees: {selectedChampion.meta?.games || 0}</li>
-                </ul>
-              </section>
+                <section className="mini-panel">
+                  <h3>Meta recente</h3>
+                  <ul>
+                    <li>
+                      Win rate: {getSelectedChampionRoleMeta(selectedChampion)?.winRate != null
+                        ? formatPercent(getSelectedChampionRoleMeta(selectedChampion).winRate)
+                        : "N/A"}
+                    </li>
+                    <li>
+                      Pick rate: {getSelectedChampionRoleMeta(selectedChampion)?.pickRate != null
+                        ? formatPercent(getSelectedChampionRoleMeta(selectedChampion).pickRate)
+                        : "N/A"}
+                    </li>
+                    <li>Parties echantillonnees sur ce poste: {getSelectedChampionRoleMeta(selectedChampion)?.games || 0}</li>
+                  </ul>
+                </section>
 
               <section className="mini-panel">
                 <h3>Synergie botlane</h3>
@@ -988,6 +1036,14 @@ export default function BotlanePage() {
   );
 }
 
+function getSelectedChampionRoleMeta(selectedChampion) {
+  if (!selectedChampion?.meta || !selectedChampion?.champion?.role) {
+    return null;
+  }
+
+  return getChampionMetaForRole(selectedChampion.meta, selectedChampion.champion.role);
+}
+
 function getRandomFilters() {
   return {
     style: randomFrom(styleKeys),
@@ -1041,7 +1097,7 @@ function humanizeTimingProfile(profile) {
 }
 
 function getChampionNameByRole(role, championId) {
-  const options = getBotlaneChampionOptions()[role === "adc" ? "adc" : "support"];
+  const options = defaultBotlaneOptions[role === "adc" ? "adc" : "support"];
   return options.find((champion) => champion.imageId === championId)?.name || championId;
 }
 
@@ -1180,7 +1236,7 @@ function isVariantOverlapPick(duo, selectedAdcId, selectedSupportId, overlapIds)
 }
 
 function getEnemyOptions(role, alliedAdcId, alliedSupportId, currentSelectedId = "") {
-  const options = getBotlaneChampionOptions()[role === "adc" ? "adc" : "support"];
+  const options = defaultBotlaneOptions[role === "adc" ? "adc" : "support"];
 
   return options.filter((option) => {
     if (option.imageId === currentSelectedId) {
@@ -1202,7 +1258,9 @@ function CompactEnemyPicker({
   options,
   isOpen,
   onToggle,
-  onSelect
+  onSelect,
+  searchValue,
+  onSearchChange
 }) {
   const selectedOption = options.find((option) => option.imageId === value) || null;
 
@@ -1226,6 +1284,14 @@ function CompactEnemyPicker({
       </button>
       {isOpen ? (
         <div className="compact-enemy-panel botlane-picker-panel">
+          <label className="botlane-picker-search">
+            <input
+              type="text"
+              value={searchValue || ""}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="Rechercher un champion"
+            />
+          </label>
           <button
             type="button"
             className="botlane-picker-option auto"
@@ -1236,7 +1302,7 @@ function CompactEnemyPicker({
             <small>Le matchup reste libre si vous ne forcez pas ce champion.</small>
           </button>
           <div className="botlane-picker-grid compact-enemy-grid">
-            {options.map((option) => (
+            {filterPickerOptions(options, searchValue).map((option) => (
               <button
                 type="button"
                 key={`${label}-${option.imageId}`}
@@ -1252,6 +1318,24 @@ function CompactEnemyPicker({
       ) : null}
     </div>
   );
+}
+
+function filterPickerOptions(options, searchValue) {
+  const normalizedSearch = normalizePickerSearch(searchValue);
+
+  if (!normalizedSearch) {
+    return options;
+  }
+
+  return options.filter((option) => normalizePickerSearch(option.name).includes(normalizedSearch));
+}
+
+function normalizePickerSearch(value) {
+  return (value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
 }
 
 function InlineRoleLabel({ role, label }) {

@@ -510,10 +510,46 @@ select:focus,
 
 .composition-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: 1fr;
+  gap: 16px;
   margin-bottom: 22px;
   align-items: stretch;
+}
+
+.draft-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+  position: relative;
+  overflow: visible;
+}
+
+.draft-versus-lane {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 16px 10px;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+}
+
+.draft-versus-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.draft-versus-lane strong {
+  font-family: var(--font-title), sans-serif;
+  font-size: 1.35rem;
+  letter-spacing: 0.08em;
 }
 
 .composition-grid.axis-top-jungle {
@@ -539,6 +575,18 @@ select:focus,
   margin-bottom: 18px;
 }
 
+.results-panel {
+  position: relative;
+  z-index: 3;
+  overflow: visible;
+}
+
+.botlane-card {
+  position: relative;
+  z-index: 1;
+  overflow: visible;
+}
+
 .botlane-card .pick-reasons {
   min-height: 160px;
 }
@@ -548,6 +596,7 @@ select:focus,
   gap: 8px;
   margin-bottom: 12px;
   position: relative;
+  z-index: 8;
 }
 
 .botlane-inline-select span {
@@ -559,13 +608,13 @@ select:focus,
 
 .team-inline-select > span {
   display: block;
-  min-height: 2.2rem;
+  min-height: 1.2rem;
   line-height: 1.25;
 }
 
 .team-inline-select {
   margin-bottom: 16px;
-  min-height: 148px;
+  min-height: 0;
   align-content: start;
 }
 
@@ -644,12 +693,36 @@ select:focus,
   top: calc(100% + 8px);
   left: 0;
   right: 0;
-  z-index: 12;
+  z-index: 30;
   padding: 12px;
   border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(7, 18, 31, 0.98);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+
+.botlane-picker-search {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.botlane-picker-search input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(6, 14, 24, 0.92);
+  color: var(--text);
+  outline: none;
+}
+
+.botlane-picker-search input::placeholder {
+  color: rgba(214, 224, 255, 0.48);
+}
+
+.botlane-picker-search input:focus {
+  border-color: rgba(78, 224, 199, 0.38);
+  box-shadow: 0 0 0 1px rgba(78, 224, 199, 0.16);
 }
 
 .botlane-picker-grid {
@@ -729,10 +802,216 @@ select:focus,
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 18px;
+  padding: 14px;
   border-radius: 22px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.draft-side-card {
+  min-height: 100%;
+  justify-content: flex-start;
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(9, 21, 37, 0.96), rgba(6, 15, 26, 0.94));
+  backdrop-filter: none;
+}
+
+.draft-side-card.picker-open {
+  z-index: 40;
+}
+
+.draft-side-card.enemy {
+  border-style: dashed;
+  background: linear-gradient(180deg, rgba(28, 15, 20, 0.96), rgba(18, 10, 14, 0.94));
+}
+
+.draft-side-card .team-inline-select {
+  min-height: auto;
+  margin-bottom: 0;
+}
+
+.draft-info-trigger {
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.draft-info-trigger:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(78, 224, 199, 0.22);
+  transform: translateY(-1px);
+}
+
+.draft-info-trigger.enemy:hover {
+  border-color: rgba(255, 151, 151, 0.24);
+}
+
+.draft-info-trigger:focus {
+  outline: 2px solid rgba(78, 224, 199, 0.35);
+  outline-offset: 2px;
+}
+
+.draft-side-card .botlane-picker-trigger {
+  grid-template-rows: auto auto;
+  min-height: 122px;
+  padding: 12px 14px;
+  align-content: start;
+  background: rgba(8, 18, 31, 0.98);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.draft-side-card .botlane-picker-trigger-main {
+  min-height: 58px;
+  align-items: center;
+  align-content: center;
+}
+
+.draft-side-card .botlane-picker-trigger-image,
+.draft-side-card .botlane-picker-trigger-placeholder {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  flex: 0 0 auto;
+}
+
+.draft-side-card .botlane-picker-trigger-main strong {
+  display: -webkit-box;
+  overflow: hidden;
+  min-height: 2.4em;
+  font-size: 1rem;
+  line-height: 1.2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-wrap: balance;
+}
+
+.draft-side-card .botlane-picker-trigger > span {
+  display: block;
+  min-height: 2.2em;
+  line-height: 1.15;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.draft-side-card.enemy .botlane-picker-trigger {
+  background: rgba(30, 14, 20, 0.98);
+  border-color: rgba(255, 151, 151, 0.16);
+}
+
+.draft-side-card .draft-info-trigger {
+  background: rgba(8, 18, 31, 0.98);
+}
+
+.draft-side-card.enemy .draft-info-trigger {
+  background: rgba(30, 14, 20, 0.98);
+}
+
+.botlane-picker-trigger-placeholder {
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 1.65rem;
+  font-weight: 800;
+}
+
+.enemy-role-label {
+  color: var(--danger);
+}
+
+.lane-suggestion-strip {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.lane-suggestion-strip > span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.lane-suggestion-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lane-suggestion-icon {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.lane-suggestion-icon img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.lane-verdict {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 16px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.lane-verdict strong,
+.lane-verdict small {
+  display: block;
+}
+
+.lane-verdict strong {
+  font-size: 0.86rem;
+}
+
+.lane-verdict small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.lane-verdict.good {
+  background: rgba(78, 224, 199, 0.12);
+  border-color: rgba(78, 224, 199, 0.35);
+}
+
+.lane-verdict.good strong {
+  color: var(--accent-soft);
+}
+
+.lane-verdict.bad {
+  background: rgba(255, 151, 151, 0.12);
+  border-color: rgba(255, 151, 151, 0.35);
+}
+
+.lane-verdict.bad strong {
+  color: #ffb4b4;
+}
+
+.lane-verdict.neutral {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .axis-card-active {
@@ -770,10 +1049,11 @@ select:focus,
 }
 
 .champion-portrait {
-  width: calc(100% + 32px);
-  height: 160px;
-  margin: -16px -16px 14px;
+  width: calc(100% + 24px);
+  height: 120px;
+  margin: -12px -12px 10px;
   object-fit: cover;
+  object-position: center 18%;
   display: block;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
@@ -984,14 +1264,18 @@ select:focus,
   display: grid;
   gap: 10px;
   padding: 14px;
+  position: relative;
+  overflow: visible;
   border-radius: 20px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .meta-role-heading {
-  display: grid;
+  display: flex;
+  align-items: center;
   gap: 8px;
+  padding-right: 26px;
 }
 
 .meta-role-heading p {
@@ -1001,9 +1285,100 @@ select:focus,
   line-height: 1.35;
 }
 
+.meta-role-link {
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.meta-role-link:hover {
+  transform: translateY(-1px);
+  border-color: rgba(78, 224, 199, 0.26);
+  background: rgba(240, 196, 97, 0.16);
+}
+
+.meta-role-page {
+  display: grid;
+  gap: 18px;
+}
+
+.meta-role-back {
+  width: auto;
+  min-width: 220px;
+  margin: 0;
+}
+
+.meta-role-page-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.meta-expand-trigger {
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  align-items: center;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.meta-expand-trigger:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(78, 224, 199, 0.24);
+  transform: translateY(-50%) scale(1.05);
+}
+
+.meta-expand-trigger.active {
+  border-color: rgba(78, 224, 199, 0.32);
+  background: rgba(78, 224, 199, 0.1);
+}
+
+.meta-expand-icon {
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .meta-champion-grid {
   display: grid;
   grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.meta-champion-flyout {
+  position: absolute;
+  top: 14px;
+  left: calc(100% + 12px);
+  width: min(280px, 22vw);
+  z-index: 18;
+  padding: 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(78, 224, 199, 0.18);
+  background:
+    linear-gradient(180deg, rgba(12, 31, 50, 0.98), rgba(7, 18, 31, 0.98)),
+    rgba(7, 18, 31, 0.98);
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(78, 224, 199, 0.06);
+}
+
+.meta-champion-flyout.align-left {
+  left: auto;
+  right: calc(100% + 12px);
+}
+
+.meta-champion-flyout-grid {
+  display: grid;
   gap: 10px;
 }
 
@@ -1211,6 +1586,24 @@ select:focus,
   border-radius: 18px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02));
   border: 1px solid rgba(255, 255, 255, 0.08);
+  width: 100%;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.meta-champion-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(78, 224, 199, 0.28);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+}
+
+.meta-champion-card:focus {
+  outline: 2px solid rgba(78, 224, 199, 0.45);
+  outline-offset: 2px;
 }
 
 .meta-champion-image {
@@ -1294,6 +1687,49 @@ select:focus,
   box-shadow: var(--shadow);
 }
 
+.build-list {
+  display: grid;
+  gap: 12px;
+}
+
+.build-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.build-card strong {
+  font-size: 0.84rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-soft);
+}
+
+.build-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.build-item-image {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  object-fit: cover;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.build-card p,
+.build-empty {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .modal-close {
   position: absolute;
   top: 16px;
@@ -1345,6 +1781,18 @@ select:focus,
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .meta-role-page-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .meta-champion-flyout,
+  .meta-champion-flyout.align-left {
+    top: calc(100% + 10px);
+    left: 0;
+    right: 0;
+    width: auto;
+  }
+
   .top-duos-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1378,11 +1826,24 @@ select:focus,
     grid-template-columns: 1fr;
   }
 
+  .draft-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
   .gallery-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .meta-role-sections {
+    grid-template-columns: 1fr;
+  }
+
+  .meta-role-heading {
+    align-items: flex-start;
+  }
+
+  .meta-role-page-grid {
     grid-template-columns: 1fr;
   }
 
